@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pytorch-trainer"
+version = "0.0.1"
+requires-python = ">=3.10"
+dependencies = [
+    "torchvision~=0.18.1",
+    "torch~=2.3.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["pythorch_trainer"]
+
+[project.scripts]
+train-model = "pythorch_trainer.trainer:main"

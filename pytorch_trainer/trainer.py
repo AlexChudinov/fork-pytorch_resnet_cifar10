@@ -1,30 +1,37 @@
 import argparse
 import os
-import shutil
 import time
 
 import torch
+import torch.backends.cudnn as cudnn
 import torch.nn as nn
 import torch.nn.parallel
-import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
-import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-import resnet
+import torchvision.transforms as transforms
+from torchvision.models import resnet18
 
-model_names = sorted(name for name in resnet.__dict__
-                     if name.islower() and not name.startswith("__")
-                     and name.startswith("resnet")
-                     and callable(resnet.__dict__[name]))
+from .cifarnet import CIFARNet
+from .utils import (AverageMeter, _checkpoint_filename, _history_filename,
+                    accuracy, save_checkpoint)
 
-print(model_names)
+_MODEL_NAMES = dict(
+    resnet18=resnet18,
+    cifarnet=CIFARNet,
+)
+
+_HISTORY = {
+    "loss": [],
+    "top1": [],
+    "batch_time": [],
+}
 
 parser = argparse.ArgumentParser(description='Propert ResNets for CIFAR10 in pytorch')
-parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet32',
-                    choices=model_names,
-                    help='model architecture: ' + ' | '.join(model_names) +
-                    ' (default: resnet32)')
+parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet18',
+                    choices=_MODEL_NAMES.keys(),
+                    help='model architecture: ' + ' | '.join(sorted(_MODEL_NAMES.keys())) +
+                         ' (default: resnet18)')
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('--epochs', default=200, type=int, metavar='N',
@@ -62,12 +69,10 @@ def main():
     global args, best_prec1
     args = parser.parse_args()
 
-
-    # Check the save_dir exists or not
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
 
-    model = torch.nn.DataParallel(resnet.__dict__[args.arch]())
+    model = torch.nn.DataParallel(_MODEL_NAMES[args.arch]())
     model.cuda()
 
     # optionally resume from a checkpoint
@@ -106,7 +111,6 @@ def main():
         batch_size=128, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
-    # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
     if args.half:
@@ -124,8 +128,7 @@ def main():
         # for resnet1202 original paper uses lr=0.01 for first 400 minibatches for warm-up
         # then switch back. In this setup it will correspond for first epoch.
         for param_group in optimizer.param_groups:
-            param_group['lr'] = args.lr*0.1
-
+            param_group['lr'] = args.lr * 0.1
 
     if args.evaluate:
         validate(val_loader, model, criterion)
@@ -141,21 +144,17 @@ def main():
         # evaluate on validation set
         prec1 = validate(val_loader, model, criterion)
 
-        # remember best prec@1 and save checkpoint
         is_best = prec1 > best_prec1
         best_prec1 = max(prec1, best_prec1)
 
-        if epoch > 0 and epoch % args.save_every == 0:
+        if epoch > 0 and epoch % args.save_every == 0 and is_best:
             save_checkpoint({
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
                 'best_prec1': best_prec1,
-            }, is_best, filename=os.path.join(args.save_dir, 'checkpoint.th'))
+            }, filename=os.path.join(args.save_dir, _checkpoint_filename()))
 
-        save_checkpoint({
-            'state_dict': model.state_dict(),
-            'best_prec1': best_prec1,
-        }, is_best, filename=os.path.join(args.save_dir, 'model.th'))
+
 
 
 def train(train_loader, model, criterion, optimizer, epoch):
@@ -208,14 +207,16 @@ def train(train_loader, model, criterion, optimizer, epoch):
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'Prec@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
-                      epoch, i, len(train_loader), batch_time=batch_time,
-                      data_time=data_time, loss=losses, top1=top1))
+                epoch, i, len(train_loader), batch_time=batch_time,
+                data_time=data_time, loss=losses, top1=top1))
 
 
 def validate(val_loader, model, criterion):
     """
     Run evaluation
     """
+    global _HISTORY
+
     batch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
@@ -223,9 +224,9 @@ def validate(val_loader, model, criterion):
     # switch to evaluate mode
     model.eval()
 
-    end = time.time()
     with torch.no_grad():
         for i, (input, target) in enumerate(val_loader):
+            end = time.time()
             target = target.cuda()
             input_var = input.cuda()
             target_var = target.cuda()
@@ -247,59 +248,23 @@ def validate(val_loader, model, criterion):
 
             # measure elapsed time
             batch_time.update(time.time() - end)
-            end = time.time()
 
             if i % args.print_freq == 0:
                 print('Test: [{0}/{1}]\t'
                       'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                       'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                       'Prec@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
-                          i, len(val_loader), batch_time=batch_time, loss=losses,
-                          top1=top1))
+                    i, len(val_loader), batch_time=batch_time, loss=losses,
+                    top1=top1))
 
     print(' * Prec@1 {top1.avg:.3f}'
           .format(top1=top1))
 
+    _HISTORY["loss"].append(losses.avg)
+    _HISTORY["top1"].append(top1.avg)
+    _HISTORY["batch_time"].append(batch_time.avg)
+
     return top1.avg
-
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
-    """
-    Save the training model
-    """
-    torch.save(state, filename)
-
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-
-def accuracy(output, target, topk=(1,)):
-    """Computes the precision@k for the specified values of k"""
-    maxk = max(topk)
-    batch_size = target.size(0)
-
-    _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
-
-    res = []
-    for k in topk:
-        correct_k = correct[:k].view(-1).float().sum(0)
-        res.append(correct_k.mul_(100.0 / batch_size))
-    return res
 
 
 if __name__ == '__main__':

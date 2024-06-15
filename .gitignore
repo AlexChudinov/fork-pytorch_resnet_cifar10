@@ -1,3 +1,6 @@
 .idea/
 dist/
 *.egg-info/
+venv/
+data/
+save_temp/

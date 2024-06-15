@@ -9,10 +9,12 @@ requires-python = ">=3.10"
 dependencies = [
     "torchvision~=0.18.1",
     "torch~=2.3.1",
+    "pandas~=2.2.2",
+    "matplotlib~=3.9.0",
 ]
 
 [tool.setuptools.packages.find]
-include = ["pythorch_trainer"]
+include = ["pytorch_trainer"]
 
 [project.scripts]
-train-model = "pythorch_trainer.trainer:main"
+train-model = "pytorch_trainer.trainer:main"

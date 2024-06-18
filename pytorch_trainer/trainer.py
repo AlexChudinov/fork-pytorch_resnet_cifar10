@@ -1,4 +1,5 @@
 import argparse
+import csv
 import os
 import time
 
@@ -13,8 +14,8 @@ import torchvision.transforms as transforms
 from torchvision.models import resnet18
 
 from .cifarnet import CIFARNet
-from .utils import (AverageMeter, _checkpoint_filename, _history_filename,
-                    accuracy, save_checkpoint)
+from .utils import (AverageMeter, _checkpoint_filename, _clear_history,
+                    _history_filename, accuracy, save_checkpoint)
 
 _MODEL_NAMES = dict(
     resnet18=resnet18,
@@ -134,6 +135,10 @@ def main():
         validate(val_loader, model, criterion)
         return
 
+    with open(os.path.join(args.save_dir, _history_filename(args.arch)), "w") as f:
+        writer = csv.DictWriter(f, fieldnames=_HISTORY.keys())
+        writer.writeheader()
+
     for epoch in range(args.start_epoch, args.epochs):
 
         # train for one epoch
@@ -152,9 +157,13 @@ def main():
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
                 'best_prec1': best_prec1,
-            }, filename=os.path.join(args.save_dir, _checkpoint_filename()))
+            }, filename=os.path.join(args.save_dir, _checkpoint_filename(args.arch)))
 
-
+        with open(os.path.join(args.save_dir, _history_filename(args.arch)), "a") as f:
+            writer = csv.DictWriter(f, fieldnames=_HISTORY.keys())
+            for idx, _ in enumerate(_HISTORY["loss"]):
+                writer.writerow({key: val[idx] for key, val in _HISTORY.items()})
+        _clear_history(_HISTORY)
 
 
 def train(train_loader, model, criterion, optimizer, epoch):
@@ -169,10 +178,10 @@ def train(train_loader, model, criterion, optimizer, epoch):
     # switch to train mode
     model.train()
 
-    end = time.time()
     for i, (input, target) in enumerate(train_loader):
 
         # measure data loading time
+        end = time.time()
         data_time.update(time.time() - end)
 
         target = target.cuda()
@@ -199,7 +208,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         # measure elapsed time
         batch_time.update(time.time() - end)
-        end = time.time()
 
         if i % args.print_freq == 0:
             print('Epoch: [{0}][{1}/{2}]\t'
@@ -207,8 +215,8 @@ def train(train_loader, model, criterion, optimizer, epoch):
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'Prec@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
-                epoch, i, len(train_loader), batch_time=batch_time,
-                data_time=data_time, loss=losses, top1=top1))
+                    epoch, i, len(train_loader), batch_time=batch_time,
+                    data_time=data_time, loss=losses, top1=top1))
 
 
 def validate(val_loader, model, criterion):

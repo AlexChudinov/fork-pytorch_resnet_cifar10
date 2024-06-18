@@ -4,3 +4,4 @@ dist/
 venv/
 data/
 save_temp/
+.ipynb_checkpoints/

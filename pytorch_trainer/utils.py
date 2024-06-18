@@ -57,3 +57,8 @@ def _checkpoint_filename(model_name: str) -> str:
 
 def _history_filename(model_name: str) -> str:
     return model_name + "-history.data"
+
+
+def _clear_history(hist: dict[str, list]) -> None:
+    for v in hist.values():
+        v.clear()

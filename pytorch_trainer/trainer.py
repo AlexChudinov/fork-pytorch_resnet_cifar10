@@ -14,11 +14,13 @@ import torchvision.transforms as transforms
 from torchvision.models import resnet18
 
 from .cifarnet import CIFARNet
+from .resnet import resnet20
 from .utils import (AverageMeter, _checkpoint_filename, _clear_history,
                     _history_filename, accuracy, save_checkpoint)
 
 _MODEL_NAMES = dict(
     resnet18=resnet18,
+    resnet20=resnet20,
     cifarnet=CIFARNet,
 )
 
@@ -139,31 +141,29 @@ def main():
         writer = csv.DictWriter(f, fieldnames=_HISTORY.keys())
         writer.writeheader()
 
-    for epoch in range(args.start_epoch, args.epochs):
+        for epoch in range(args.start_epoch, args.epochs):
 
-        # train for one epoch
-        print('current lr {:.5e}'.format(optimizer.param_groups[0]['lr']))
-        train(train_loader, model, criterion, optimizer, epoch)
-        lr_scheduler.step()
+            # train for one epoch
+            print('current lr {:.5e}'.format(optimizer.param_groups[0]['lr']))
+            train(train_loader, model, criterion, optimizer, epoch)
+            lr_scheduler.step()
 
-        # evaluate on validation set
-        prec1 = validate(val_loader, model, criterion)
+            # evaluate on validation set
+            prec1 = validate(val_loader, model, criterion)
 
-        is_best = prec1 > best_prec1
-        best_prec1 = max(prec1, best_prec1)
+            is_best = prec1 > best_prec1
+            best_prec1 = max(prec1, best_prec1)
 
-        if epoch > 0 and epoch % args.save_every == 0 and is_best:
-            save_checkpoint({
-                'epoch': epoch + 1,
-                'state_dict': model.state_dict(),
-                'best_prec1': best_prec1,
-            }, filename=os.path.join(args.save_dir, _checkpoint_filename(args.arch)))
+            if epoch > 0 and epoch % args.save_every == 0 and is_best:
+                save_checkpoint({
+                    'epoch': epoch + 1,
+                    'state_dict': model.state_dict(),
+                    'best_prec1': best_prec1,
+                }, filename=os.path.join(args.save_dir, _checkpoint_filename(args.arch)))
 
-        with open(os.path.join(args.save_dir, _history_filename(args.arch)), "a") as f:
-            writer = csv.DictWriter(f, fieldnames=_HISTORY.keys())
             for idx, _ in enumerate(_HISTORY["loss"]):
                 writer.writerow({key: val[idx] for key, val in _HISTORY.items()})
-        _clear_history(_HISTORY)
+            _clear_history(_HISTORY)
 
 
 def train(train_loader, model, criterion, optimizer, epoch):

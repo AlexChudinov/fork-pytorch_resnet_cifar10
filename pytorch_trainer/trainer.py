@@ -13,13 +13,16 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from torchvision.models import resnet18
 
+import pytorch_trainer.resnet as resnet
+
 from .cifarnet import CIFARNet
-from .resnet import resnet20
+from .resnet import resnet20, resnet110
 from .utils import (AverageMeter, _checkpoint_filename, _clear_history,
                     _history_filename, accuracy, save_checkpoint)
 
 _MODEL_NAMES = dict(
     resnet18=resnet18,
+    resnet110=resnet110,
     resnet20=resnet20,
     cifarnet=CIFARNet,
 )
@@ -65,12 +68,19 @@ parser.add_argument('--save-dir', dest='save_dir',
 parser.add_argument('--save-every', dest='save_every',
                     help='Saves checkpoints at every specified number of epochs',
                     type=int, default=10)
+parser.add_argument("--no-batch-norm", action="store_true",
+                    help="Switch off all batch normalization between layers")
+parser.add_argument("--dropout-p", default=0.0, type=float,
+                    help="Probability to dropout connection between layers")
+
 best_prec1 = 0
 
 
 def main():
     global args, best_prec1
     args = parser.parse_args()
+    resnet.NO_BATCH_NORM = args.no_batch_norm
+    resnet.DROPOUT_PROB = args.dropout_p
 
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)

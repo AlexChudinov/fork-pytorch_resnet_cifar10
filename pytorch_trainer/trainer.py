@@ -70,6 +70,8 @@ parser.add_argument('--save-every', dest='save_every',
                     type=int, default=10)
 parser.add_argument("--no-batch-norm", action="store_true",
                     help="Switch off all batch normalization between layers")
+parser.add_argument("--dropout-p", default=0.0, type=float,
+                    help="Probability to dropout connection between layers")
 
 best_prec1 = 0
 
@@ -78,6 +80,7 @@ def main():
     global args, best_prec1
     args = parser.parse_args()
     resnet.NO_BATCH_NORM = args.no_batch_norm
+    resnet.DROPOUT_PROB = args.dropout_p
 
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)

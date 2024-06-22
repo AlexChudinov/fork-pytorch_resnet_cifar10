@@ -32,12 +32,20 @@ import torch.nn.functional as F
 import torch.nn.init as init
 
 NO_BATCH_NORM = False
+DROPOUT_PROB = 0.0
+
 
 def create_batch_norm(*args, **kwargs):
     global NO_BATCH_NORM
     if NO_BATCH_NORM:
         return nn.Identity()
-    return nn.BatchNorm2d(*args, **kwargs)
+    batch_norm = nn.BatchNorm2d(*args, **kwargs)
+    if 0.0 < DROPOUT_PROB < 1.0:
+        batch_norm = nn.Sequential(
+            batch_norm,
+            nn.Dropout2d(DROPOUT_PROB),
+        )
+    return batch_norm
 
 def output_activation():
     global NO_BATCH_NORM
